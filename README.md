@@ -13,7 +13,7 @@ Authority nodes assert a proof of their identity by creating a signature `S` mad
 S = eth.sign(Mpub, H)
 ```
 
-Since signatures are 65 bytes long, they're too big to fit into a block header's `extraData` field limited to 32 bytes. Instead, `S` is "chunked" into `s1` and `s2`, where as a concatenated string `s1+s2 == S`. As-is, `s1` has length of 16 and `s2` has a string length of 116 including the `0x` prefix, but this is a mostly arbitrary number within field size limit bounds.
+Since signatures are 65 bytes long, they're too big to fit into a block header's `extraData` field limited to 32 bytes. Instead, `S` is "chunked" into `s1` and `s2`, where as a concatenated string `s1+s2 == S`. As-is, `s1` has length of 8 and `s2` has a string length of 124 including the `0x` prefix, but this is a mostly arbitrary number within field size limit bounds.
 
 `s1` is then set by the authority node `M` as it's `extraData` field value, and `s2` is included as transaction `data` in a transaction that is created and broadcasted to the network for each new block.
 
