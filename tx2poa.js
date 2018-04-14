@@ -17,7 +17,7 @@ function findPoaTxData(block) {
 		}
 		var data;
 		try {
-			data = JSON.parse(tx.data);
+			data = JSON.parse(web3.toAscii(tx.data));
 		} catch(err) {
 			console.log("invalid PoA Tx data for Tx:", tx);
 			return false;
@@ -96,15 +96,16 @@ function postAuthorityDemonstration() {
 	// => sigHeaderChunk+sigTxChunk = signature hash
 
 	// post transaction as an authority
+	var d = JSON.stringify({
+		"sig": sigTxChunk,
+		"enode": admin.nodeInfo.enode
+	});
 	txObj = {
 		from: authorityAccount, 
 		to: authorityAccount, 
 		value: web3.toWei(1, 'wei'),
 		// use JSON just because we can and it seems extensible
-		data: JSON.stringify({
-			"sig": sigTxChunk,
-			"enode": admin.nodeInfo.enode
-		})
+		data: web3.fromAscii(d)
 	};
 	tx = eth.sendTransaction();
 	// include this tx hash within 'extraData' in block if our authoritative miner wins.
