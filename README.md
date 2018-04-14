@@ -1,14 +1,36 @@
 
-### TLDR
+# Transaction+Header PoA
 
-The main idea is that nodes designated as "authorities" by external human consensus and configuration act as "authorized miners," and post a new "proof of authority transaction" for each new block added to the chain. The transaction includes a _signature of the previous block's hash_ made by the authority's private key. If an authorized miner wins the block, the hash of this transaction is included in the 'extraData' field of the mined block and can be used by other nodes to verify.
+The main idea is that nodes designated as "authorities" by external human consensus and configuration act as "authorized miners," and post a new "incomplete proof of authority transaction" for each new block added to the chain. This transaction contains an incomplete chunk of the miner's signature of the previous block's hash, which together with the rest of the signature found in the winning miner's block's `extraData` field can be used to verify that the block was indeed mined by an authoritative miner.
 
-Minions (non-authority nodes on the sidechain) and authorities validate each new block by confirming that, ultimately, the transaction specified has a valid signature of the previous block's hash as made by the winning miner.
+This method of determining a PoA consensus does not require any protocol changes and utilizes only pre-existing tools and methods. Like a protocol-based PoA, it depends on the assumption that all nodes in the sidechain network can run equivalent or compatible configurations and agree on a list of pre-configured "authority" nodes described by public key addresses.
+
+### Details
+
+Authority nodes assert a proof of their identity by creating a signature `S` made by the authority's private key `Mpriv` of the previous block's hash `H`.
+
+```
+S = eth.sign(Mpub, H)
+```
+
+Since signatures are 65 bytes long, they're too big to fit into a block header's `extraData` field limited to 32 bytes. Instead, `S` is "chunked" into `s1` and `s2`, where as a concatenated string `s1+s2 == S`. As-is, `s1` has length of 16 and `s2` has a string length of 116 including the `0x` prefix, but this is a mostly arbitrary number within field size limit bounds.
+
+`s1` is then set by the authority node as it's miner's `extraData` field value, and `s2` is included as transaction `data` in a transaction that is created and broadcasted to the network for each new block.
+
+If miner `M` wins the block, any node on the network can verify it's authority by using `EcRecover` to verify that
+
+```
+S=s1+s2;
+personal.ecRecover(H, S) == Mpub;
+```
+
+where together the transaction and block header contain the valid signature for the previous block's hash as made by `Mpriv`. 
 
 If a block fails this PoA/Tx validation, the block is simply purged.
 
 ### TODO
 - [x] geth needs a `personal.ecRecover` IPC API point to verify a given signature.
+- [ ] expose `miner.setExtra` API. It's missing and should exist. 
 
 ### Run
 
@@ -27,7 +49,8 @@ where `delegateAuthorityOrMinion("minion")` will make the node a Minion, otherwi
 ### Notes
 
 1. I'm not sure if this'll actually work.
-2. It depends on using `tx.data/input` in a hacky way; instead of using it as compiled contract code it just uses it as a messenging service.
-3. Depends on geth making the following IPC modules available `--ipc-apis=personal,miner,eth,web3,debug`.
-4. We have to use transactions instead of just header `extraData` because that field is limited to 32 bytes and signature hashes are 65. This is kind of annoying because it would be a lot simpler to just include the signature in the header.
-5. It's far faster to use an already-unlocked account for the authorities to sign block hashes. However, this compromises the public `eth` module from being used as a public RPC endpoint. This is a bummer. It means that only Minion nodes are safe to use as RPC endpoints.
+2. I don't know if it will be very scalable.
+3. It depends on using `tx.data/input` in a hacky way; instead of using it as compiled contract code it just uses it as a messenging service.
+4. Depends on geth making the following IPC modules available `--ipc-apis=personal,miner,eth,web3,debug`.
+5. We have to use transactions instead of just header `extraData` because that field is limited to 32 bytes and signature hashes are 65. This is kind of annoying because it would be a lot simpler to just include the signature in the header.
+6. It's far faster to use an already-unlocked account for the authorities to sign block hashes. However, this compromises the public `eth` module from being used as a public RPC endpoint. This is a bummer. It means that only Minion nodes are safe to use as RPC endpoints.
