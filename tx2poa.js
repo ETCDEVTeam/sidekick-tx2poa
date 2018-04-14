@@ -6,6 +6,8 @@ loadScript("authorities.js");
 // validateTxAuthority validates the authority of a block
 // it returns false if invalid, true if valid
 function validateAuthorityByTransaction(block) {
+	// gimmes and sanity checks
+	// 
 	// genesis block is automatically OK
 	if (block.number === 0) {
 		return true
@@ -24,9 +26,8 @@ function validateAuthorityByTransaction(block) {
 	if (tx.from !== block.miner) {
 		return false;
 	}
-	// // this might be overkill?
-	// \x19Ethereum Signed Message:\n%d%s", len(data), data
-	return geth.verifySigned(tx.from, tx.input, eth.getBlock(block.number-1).hash) // FIXME: strip hash 0x prefix
+	// here's the real poa; the rest could easily be forged
+	return personal.ecRecover(eth.getBlock(block.number-1).hash, tx.input) == block.miner;
 }
 
 // ensureOrIgnoreBlockAuthority validates the current block's authority.
@@ -54,11 +55,14 @@ function postAuthorityDemonstration() {
 		from: authorityAccount, 
 		to: authorityAccount, 
 		value: web3.toWei(1, 'wei'),
-		data: txpool.sign(authorityAccount, lastBlock.hash) // FIXME strip 0x prefix
+		data: eth.sign(authorityAccount, lastBlock.hash)
 	};
 	tx = eth.sendTransaction();
 	// include this tx hash as 'extraData' in block if our authoritative miner wins
-	miner.setExtra(tx);
+	if (!miner.setExtra(tx)) {
+		console.log("err", "failed to set miner extra", tx, "becoming a Minion instead...");
+		tx = "err";
+	}
 }
 
 // runAuthority runs recursively and continuously asserts the authority of a node
@@ -67,6 +71,11 @@ function postAuthorityDemonstration() {
 // The function also validates the authority of all incoming blocks.
 // FIXME: it might block the normal shutdown mechanism for a geth client
 function runAuthority() {
+	if (tx === "err") {
+		miner.stop(); // TODO: handle me better maybe
+		admin.sleepBlocks(1);
+		runMinion();
+	}
 	if (ensureOrIgnoreCurrentBlockAuthority()) {
 		postAuthorityDemonstration();
 	} else {
@@ -110,18 +119,23 @@ function ensureAuthorityAccount() {
 		// Could improve so authority accounts could arbitrary account A from n accounts
 		authorityAccount = eth.accounts[0];
 	}
-
+	if (!personal.unlockAccount(authorityAccount)) {
+		exit;
+	}
 	miner.setEtherbase(authorityAccount);	
 }
 
-function delegateAuthorityOrMinion() {
-	// If primary account exists as a designated authority (defined in authorities.js), then
-	// run authority-proving script.
-	if (authorities.indexOf(eth.accounts[0]) >= 0) {
+function delegateAuthorityOrMinion(beMinion) {
+	if (beMinion === "minion") {
+		console.log("Running as Minion...");
+		runMinion();
+	} else if (authorities.indexOf(eth.accounts[0]) >= 0) {
+		console.log("Found authority key, running as Authority...");
 		ensureAuthorityAccount();
 		miner.start();
 		runAuthority();
 	} else {
+		console.log("Running as Minion...");
 		runMinion();
 	}
 }
