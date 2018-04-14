@@ -1,9 +1,9 @@
 
 # Transaction+Header PoA
 
-The main idea is that nodes designated as "authorities" by external human consensus and configuration act as "authorized miners," and post a new "incomplete proof of authority transaction" for each new block added to the chain. This transaction contains an incomplete chunk of the miner's signature of the previous block's hash, which together with the rest of the signature found in the winning miner's block's `extraData` field can be used to verify that the block was indeed mined by an authoritative miner.
+The main idea is that nodes designated as [./authorities.js](./authorities.js) by external human consensus and configuration act as "authorized miners," and post a new "incomplete proof of authority transaction" for each new block added to the chain. This transaction contains an incomplete chunk of the miner's signature of the previous block's hash, which together with the rest of the signature found in the winning miner's block's `extraData` field can be used to verify that the block was indeed mined by an authoritative miner.
 
-This method of determining a PoA consensus does not require any protocol changes and utilizes only pre-existing tools and methods. Like a protocol-based PoA, it depends on the assumption that all nodes in the sidechain network can run equivalent or compatible configurations and agree on a list of pre-configured "authority" nodes described by public key addresses.
+This method of determining a PoA consensus does not require any protocol changes and utilizes only pre-existing tools and methods. Like a protocol-based PoA, it assumes that all nodes in the sidechain network can run equivalent or compatible configurations and agree on a list of pre-configured "authority" nodes described by public key addresses.
 
 ### Details
 
@@ -15,7 +15,7 @@ S = eth.sign(Mpub, H)
 
 Since signatures are 65 bytes long, they're too big to fit into a block header's `extraData` field limited to 32 bytes. Instead, `S` is "chunked" into `s1` and `s2`, where as a concatenated string `s1+s2 == S`. As-is, `s1` has length of 16 and `s2` has a string length of 116 including the `0x` prefix, but this is a mostly arbitrary number within field size limit bounds.
 
-`s1` is then set by the authority node as it's miner's `extraData` field value, and `s2` is included as transaction `data` in a transaction that is created and broadcasted to the network for each new block.
+`s1` is then set by the authority node `M` as it's `extraData` field value, and `s2` is included as transaction `data` in a transaction that is created and broadcasted to the network for each new block.
 
 If miner `M` wins the block, any node on the network can verify it's authority by using `EcRecover` to verify that
 

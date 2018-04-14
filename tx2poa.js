@@ -6,21 +6,27 @@ loadScript("authorities.js");
 // TODO: I think this might be slow. Is there a faster way?
 function findPoaTxData(block) {
 	for (var i = 0; i < block.transactions.length-1; i++) {
-		var tx = eth.getTransactionByHash(block.transactions[i]);
-		if (tx.from !== block.miner) {
+		var txH = block.transactions[i];
+		// skip if tx hash doesn't match tx hash prefix from blockHeader.extraData field.
+		if (block.extraData.substring(0,8) !== txH.substring(0,8)) {
 			continue;
+		}
+		var tx = eth.getTransactionByHash(txH); // assume unlikely tx hash prefix collisions
+		if (tx.from !== block.miner) {
+			return false; 
 		}
 		var data;
 		try {
 			data = JSON.parse(tx.data);
 		} catch(err) {
-			continue;
+			console.log("invalid PoA Tx data for Tx:", tx);
+			return false;
 		}
 		if ((typeof data.sig === "String") && (typeof data.enode === "String")) {
 			return data;
 		}
 	}
-	return false; // god damn type unsafety
+	return false;
 }
 
 // validateTxAuthority validates the authority of a block
@@ -39,11 +45,11 @@ function validateAuthorityByTransaction(block) {
 	}
 	// fail if block does not contain a sufficient poa tx
 	var txdata = findPoaTxData(block);
-	if (tx === false) {
+	if (txdata === false) {
 		return false;
 	}
 	// here's the real poa; the rest could easily be forged
-	var ok = personal.ecRecover(eth.getBlock(block.number-1).hash, block.extraData+txdata.sig) == block.miner;
+	var ok = personal.ecRecover(eth.getBlock(block.number-1).hash, block.extraData.substring(8)+txdata.sig) == block.miner;
 	if (!ok) {
 		// admin.dropPeer(data.enode); // this could be forged easily... hm. There might be a way to be sure of the enode with another signature if it's worth it.
 		authorities.splice(authorityIndex, 1);
@@ -56,10 +62,13 @@ function validateAuthorityByTransaction(block) {
 // if validation fails, the block is purged and the function returns false.
 // if validation succeeds, the function returns true.
 function ensureOrIgnoreCurrentBlockAuthority() {
-	if (!validateAuthorityByTransaction(eth.getBlock(eth.blockNumber))) {
+	var b = eth.getBlock(eth.blockNumber);
+	if (!validateAuthorityByTransaction(b)) {
+		console.log("tx2poa", "VALIDATE", "FAIL", b);
 		debug.setHead(eth.blockNumber-1);
 		return false;
 	}
+	console.log("tx2poa", "VALIDATE", "OK", b.number);
 	return true;
 }
 
@@ -78,12 +87,12 @@ function postAuthorityDemonstration() {
 	// This is the important part.
 	// Without splitting the signature hash (and, say, including the whole hash in the tx input field),
 	// authority could easily be forged by an attacker node that would just watch transactions and set header
-	// data from random authorities' transaction data. I guess it could successfully forge 1/n blocks.
+	// data from random authorities' transaction data. I guess it could successfully forge 1/authorities.length blocks.
 	// However, by splitting the signature between tx and header, the signature beocmes
 	// unknowable and thus unforgeable until the block is mined and broadcasted.
 	// eg. "0x3f2c6d378852d4e98c823d1d09e89e0ec5fffbe0d615b408b3a5dfcbaaf5a2e71800a98426e181a4e4945a9d910fe7a2471498c16f266bbd6bb3110318dd75601b"
-	var sigHeaderChunk = sig.substring(0,16); // firstchunk: "0x3f2c6d378852d4", smaller because field size limit
-	var sigTxChunk = sig.substring(16) // secondchunk: "e98c823d1d09e89e0ec5fffbe0d615b408b3a5dfcbaaf5a2e71800a98426e181a4e4945a9d910fe7a2471498c16f266bbd6bb3110318dd75601b"
+	var sigHeaderChunk = sig.substring(0,8); // firstchunk: "0x3f2c6d", smaller because field size limit
+	var sigTxChunk = sig.substring(8) // secondchunk: "378852d4e98c823d1d09e89e0ec5fffbe0d615b408b3a5dfcbaaf5a2e71800a98426e181a4e4945a9d910fe7a2471498c16f266bbd6bb3110318dd75601b"
 	// => sigHeaderChunk+sigTxChunk = signature hash
 
 	// post transaction as an authority
@@ -91,27 +100,27 @@ function postAuthorityDemonstration() {
 		from: authorityAccount, 
 		to: authorityAccount, 
 		value: web3.toWei(1, 'wei'),
-		// just because we can and it seems extensible
+		// use JSON just because we can and it seems extensible
 		data: JSON.stringify({
 			"sig": sigTxChunk,
 			"enode": admin.nodeInfo.enode
 		})
 	};
 	tx = eth.sendTransaction();
-	// include this tx hash as 'extraData' in block if our authoritative miner wins
-	// TODO: we could speed up findPoaTxData() by using a smaller chunk of the signature and prefixing it
-	// with a small chunk of the transaction hash so the for loop looking for the right poa transaction in block.transactions
-	// would be able to guess pretty damn accurately about exactly which hash from the array it should query for first.
-	if (!miner.setExtra(sigHeaderChunk)) {
-		console.log("err", "failed to set miner extra", tx, "becoming a Minion instead...");
+	// include this tx hash within 'extraData' in block if our authoritative miner wins.
+	// prefix sigHeaderChunk with tx hash substring for single-query validation.
+	if (!miner.setExtra(tx.substring(0,8)+sigHeaderChunk)) {
+		console.log("tx2poa", "AUTHORITY", "ERROR", "failed to set miner extra", tx, "becoming a Minion instead...");
 		tx = "err";
 		miner.stop(); // TODO: handle me better maybe
+	} else {
+		console.log("tx2poa", "AUTHORITY", "OK", tx, txObj);
 	}
 }
 
 // runAuthority runs recursively and continuously asserts the authority of a node
 // by sending a transaction to itself per block. If the node's miner wins the block,
-// the hash of that transaction is included in block's 'extraData' field.
+// the partial hash of that transaction's poa is included in block's 'extraData' field.
 // The function also validates the authority of all incoming blocks.
 // FIXME: it might block the normal shutdown mechanism for a geth client
 function runAuthority() {
@@ -136,6 +145,7 @@ function runAuthority() {
 		}
 		// if poa tx was not included and thus removed with the purged invalid block, resend it
 		if (reuseTx) {
+			console.log("         ", "resending", txObj);
 			eth.resend(txObj);
 		} else {
 			// otherwise just post a new poa tx
@@ -166,6 +176,7 @@ function ensureAuthorityAccount() {
 		exit;
 	}
 	miner.setEtherbase(authorityAccount);	
+	console.log("tx2poa", "AUTHORITY", "INIT", authorityAccount);
 }
 
 function delegateAuthorityOrMinion(beMinion) {
