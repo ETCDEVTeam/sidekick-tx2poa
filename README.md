@@ -20,8 +20,10 @@ Since signatures are 65 bytes long, they're too big to fit into a block header's
 If miner `M` wins the block, any node on the network can verify it's authority by using `EcRecover` to verify that
 
 ```
-S=s1+s2;
-personal.ecRecover(H, S) == Mpub;
+s1 = currentBlock.extraData.substring(8); // chunk1
+s2 = poaTx.sig // chunk2
+S = s1 + s2;
+personal.ecRecover(H, S) == Mpub == currentBlock.miner == poaTx.From;
 ```
 
 where together the transaction and block header contain the valid signature for the previous block's hash as made by `Mpriv`. 
@@ -42,7 +44,7 @@ If a block fails this PoA/Tx validation, the block is simply purged.
 geth --chain=sidenet --ipc-api="personal,miner,eth,web3,debug" --js-path="./tx2poa" --exec="loadScript('tx2poa.js'); delegateAuthorityOrMinion();" console
 ```
 
-where `delegateAuthorityOrMinion("minion")` will make the node a Minion, otherwise the node will check to see if it holds an authority key at `eth.accounts[0]` (TODO: improve this logic for greater configurability) and can unlock it.
+where `delegateAuthorityOrMinion("minion")` will make the node a Minion, otherwise the node will check to see if it holds an authority key at `eth.accounts[0]` and can unlock it (this could be improved).
 
 > `personal` and `miner` IPC modules only need to be enabled for authority nodes.
 
@@ -50,7 +52,7 @@ where `delegateAuthorityOrMinion("minion")` will make the node a Minion, otherwi
 
 1. I'm not sure if this'll actually work.
 2. I don't know if it will be very scalable.
-3. It depends on using `tx.data/input` in a hacky way; instead of using it as compiled contract code it just uses it as a messenging service.
+3. It depends on using `tx.data/input` in a hacky way; instead of using it as compiled contract code it just uses it as a JSON messenging service.
 4. Depends on geth making the following IPC modules available `--ipc-apis=personal,miner,eth,web3,debug`.
 5. We have to use transactions instead of just header `extraData` because that field is limited to 32 bytes and signature hashes are 65. This is kind of annoying because it would be a lot simpler to just include the signature in the header.
 6. It's far faster to use an already-unlocked account for the authorities to sign block hashes. However, this compromises the public `eth` module from being used as a public RPC endpoint. This is a bummer. It means that only Minion nodes are safe to use as RPC endpoints.
