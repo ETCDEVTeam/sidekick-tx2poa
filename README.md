@@ -40,8 +40,7 @@ where together the transaction and block header contain the valid signature for 
 If a block fails this PoA/Tx validation, the block is simply purged.
 
 ### TODO
-- [x] geth needs a `personal.ecRecover` IPC API point to verify a given signature.
-- [x] expose `miner.setExtra` API. It's missing and should exist.
+- [x] geth needs a `personal.ecRecover` IPC API point to verify a given signature. https://github.com/ETCDEVTeam/sidekick-tx2poa.git
 
 ### Run
 
