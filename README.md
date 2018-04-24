@@ -6,7 +6,7 @@
 
 - [github.com/ETCDEVTeam/sidekick-liaison](http://github.com/ETCDEVTeam/sidekick-liaison). A bash script that listens to a sidechain node and facilitates communication with an arbitrary mainnet node. As written, relies on [emerald-cli](https://github.com/ETCDEVTeam/emerald-cli).
 
-- [github.com/ETCDEVTeam/sidekick-checkpointer](http://github.com/ETCDEVTeam/sidekick-checkpointer). A checkpointing mechanism implemented through an ephemerald JS console.
+- [github.com/ETCDEVTeam/sidekick-checkpointer](http://github.com/ETCDEVTeam/sidekick-checkpointer). A checkpointing mechanism implemented through an ephemeral JS console.
 
 # sidekick-tx2poa: Transaction+Header PoA
 
@@ -49,11 +49,11 @@ If a block fails this PoA/Tx validation, the block is simply purged.
 3. You'll probably want to set up your authority nodes as bootnodes in the config as well.
 4. Run:
 ```
-$ geth --chain=sidenet --ipc-api="personal,miner,eth,web3,debug" --js-path="./tx2poa" js path/to/authority.js
+$ geth --chain=sidenet --ipc-api="personal,miner,eth,web3,debug" --js-path="./sidekick-tx2poa" js path/to/authority.js
 
 OR
 
-$ geth --chain=sidenet --ipc-api="eth,web3,debug" --js-path="./tx2poa" js path/to/minion.js
+$ geth --chain=sidenet --ipc-api="eth,web3,debug" --js-path="./sidekick-tx2poa" js path/to/minion.js
 ```
 
 ### Notes
