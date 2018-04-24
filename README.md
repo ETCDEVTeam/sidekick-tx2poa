@@ -1,5 +1,14 @@
+# ETCDEVTeam/sidekick-*
 
-# Transaction+Header PoA
+> A collection of scripts and documents outlining requirements and initial adhoc solves for a minimum-viable ETC sidechains implementation.
+
+- [github.com/ETCDEVTeam/sidekick-tx2poa](http://github.com/ETCDEVTeam/sidekick-tx2poa). A PoA mechanism implemented through an emphemeral JS console.
+
+- [github.com/ETCDEVTeam/sidekick-liason](http://github.com/ETCDEVTeam/sidekick-liason). A bash script that listens to a sidechain node and facilitates communication with an arbitrary mainnet node. As written, relies on [emerald-cli](https://github.com/ETCDEVTeam/emerald-cli).
+
+- [github.com/ETCDEVTeam/sidekick-checkpointer](http://github.com/ETCDEVTeam/sidekick-checkpointer). A checkpointing mechanism implemented through an ephemerald JS console.
+
+# sidekick-tx2poa: Transaction+Header PoA
 
 The main idea is that nodes designated as [./authorities.js](./authorities.js) by configuration act as "authorized miners," and post a new "incomplete proof of authority transaction" for each new block added to the chain. This transaction contains an incomplete chunk of the miner's signature of the previous block's hash, which together with the rest of the signature found in the winning miner's block's `extraData` field can be used to verify that the block was indeed mined by an authoritative miner.
 
