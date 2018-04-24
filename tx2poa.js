@@ -13,7 +13,7 @@ function findPoaTxData(block) {
 		}
 		var tx = eth.getTransactionByHash(txH); // assume unlikely tx hash prefix collisions
 		if (tx.from !== block.miner) {
-			return false; 
+			return false;
 		}
 		var data;
 		try {
@@ -33,7 +33,7 @@ function findPoaTxData(block) {
 // it returns false if invalid, true if valid
 function validateAuthorityByTransaction(block) {
 	// gimmes and sanity checks
-	// 
+	//
 	// genesis block is automatically OK
 	if (block.number === 0) {
 		return true
@@ -52,7 +52,7 @@ function validateAuthorityByTransaction(block) {
 	var ok = personal.ecRecover(eth.getBlock(block.number-1).hash, block.extraData.substring(8)+txdata.sig) == block.miner;
 	if (!ok) {
 		// admin.dropPeer(data.enode); // this could be forged easily... hm. There might be a way to be sure of the enode with another signature if it's worth it.
-		authorities.splice(authorityIndex, 1);
+		// authorities.splice(authorityIndex, 1);
 		return ok; // false
 	}
 	return ok;
@@ -74,6 +74,7 @@ function ensureOrIgnoreCurrentBlockAuthority() {
 
 var txObj = {}; // tx obj of last poa tx
 var tx = ""; // hash of last poa tx
+
 function postAuthorityDemonstration() {
 	var lastBlockN = 0; // init case as genesis
 	if (eth.blockNumber > 0) {
@@ -101,8 +102,8 @@ function postAuthorityDemonstration() {
 		"enode": admin.nodeInfo.enode
 	});
 	txObj = {
-		from: authorityAccount, 
-		to: authorityAccount, 
+		from: authorityAccount,
+		to: authorityAccount,
 		value: web3.toWei(1, 'wei'),
 		// use JSON just because we can and it seems extensible
 		data: web3.fromAscii(d)
@@ -117,6 +118,23 @@ function postAuthorityDemonstration() {
 	} else {
 		console.log("tx2poa", "AUTHORITY", "OK", tx, txObj);
 	}
+}
+
+// ensure there is an account and that it is unlocked
+function ensureAuthorityAccount() {
+	var authorityAccount;
+	if (eth.accounts.length === 0) {
+	    exit; // sanity check
+	} else {
+		// Could improve so authority accounts could arbitrary account A from n accounts
+		authorityAccount = eth.accounts[0];
+	}
+	if (!personal.unlockAccount(authorityAccount)) {
+		exit;
+	}
+	miner.setEtherbase(authorityAccount);
+	console.log("tx2poa", "AUTHORITY", "INIT", authorityAccount);
+	return true;
 }
 
 // runAuthority runs recursively and continuously asserts the authority of a node
@@ -142,11 +160,11 @@ function runAuthority() {
 					reuseTx = true;
 					break;
 				}
-			}	
+			}
 		}
 		// if poa tx was not included and thus removed with the purged invalid block, resend it
 		if (reuseTx) {
-			console.log("         ", "resending", txObj);
+			console.log("tx2poa", "AUTHORITY", "RESENDING", txObj);
 			eth.resend(txObj);
 		} else {
 			// otherwise just post a new poa tx
@@ -163,35 +181,3 @@ function runMinion() {
 	admin.sleepBlocks(1);
 	runMinion();
 }
-
-// ensure there is an account and that it is unlocked
-function ensureAuthorityAccount() {
-	var authorityAccount;
-	if (eth.accounts.length === 0) {
-	    exit; // sanity check
-	} else {
-		// Could improve so authority accounts could arbitrary account A from n accounts
-		authorityAccount = eth.accounts[0];
-	}
-	if (!personal.unlockAccount(authorityAccount)) {
-		exit;
-	}
-	miner.setEtherbase(authorityAccount);	
-	console.log("tx2poa", "AUTHORITY", "INIT", authorityAccount);
-}
-
-function delegateAuthorityOrMinion(beMinion) {
-	if (beMinion === "minion") {
-		console.log("Running as Minion...");
-		runMinion();
-	} else if (authorities.indexOf(eth.accounts[0]) >= 0) {
-		console.log("Found authority key, running as Authority...");
-		ensureAuthorityAccount();
-		miner.start();
-		runAuthority();
-	} else {
-		console.log("Running as Minion...");
-		runMinion();
-	}
-}
-

@@ -1,7 +1,7 @@
 
 # Transaction+Header PoA
 
-The main idea is that nodes designated as [./authorities.js](./authorities.js) by external human consensus and configuration act as "authorized miners," and post a new "incomplete proof of authority transaction" for each new block added to the chain. This transaction contains an incomplete chunk of the miner's signature of the previous block's hash, which together with the rest of the signature found in the winning miner's block's `extraData` field can be used to verify that the block was indeed mined by an authoritative miner.
+The main idea is that nodes designated as [./authorities.js](./authorities.js) by configuration act as "authorized miners," and post a new "incomplete proof of authority transaction" for each new block added to the chain. This transaction contains an incomplete chunk of the miner's signature of the previous block's hash, which together with the rest of the signature found in the winning miner's block's `extraData` field can be used to verify that the block was indeed mined by an authoritative miner.
 
 This method of determining a PoA consensus does not require any protocol changes and utilizes only pre-existing tools and methods. Like a protocol-based PoA, it assumes that all nodes in the sidechain network can run equivalent or compatible configurations and agree on a list of pre-configured "authority" nodes described by public key addresses.
 
@@ -26,13 +26,13 @@ S = s1 + s2;
 personal.ecRecover(H, S) == Mpub == currentBlock.miner == poaTx.From;
 ```
 
-where together the transaction and block header contain the valid signature for the previous block's hash as made by `Mpriv`. 
+where together the transaction and block header contain the valid signature for the previous block's hash as made by `Mpriv`.
 
 If a block fails this PoA/Tx validation, the block is simply purged.
 
 ### TODO
 - [x] geth needs a `personal.ecRecover` IPC API point to verify a given signature.
-- [ ] expose `miner.setExtra` API. It's missing and should exist. 
+- [x] expose `miner.setExtra` API. It's missing and should exist.
 
 ### Run
 
@@ -41,18 +41,19 @@ If a block fails this PoA/Tx validation, the block is simply purged.
 3. You'll probably want to set up your authority nodes as bootnodes in the config as well.
 4. Run:
 ```
-geth --chain=sidenet --ipc-api="personal,miner,eth,web3,debug" --js-path="./tx2poa" --exec="loadScript('tx2poa.js'); delegateAuthorityOrMinion();" console
+$ geth --chain=sidenet --ipc-api="personal,miner,eth,web3,debug" --js-path="./tx2poa" js path/to/authority.js
+
+OR
+
+$ geth --chain=sidenet --ipc-api="eth,web3,debug" --js-path="./tx2poa" js path/to/minion.js
 ```
-
-where `delegateAuthorityOrMinion("minion")` will make the node a Minion, otherwise the node will check to see if it holds an authority key at `eth.accounts[0]` and can unlock it (this could be improved).
-
-> `personal` and `miner` IPC modules only need to be enabled for authority nodes.
 
 ### Notes
 
 1. I'm not sure if this'll actually work.
 2. I don't know if it will be very scalable.
-3. It depends on using `tx.data/input` in a hacky way; instead of using it as compiled contract code it just uses it as a JSON messenging service.
+3. It depends on using `tx.data[|input]` in a hacky way; instead of using it as compiled contract code it just uses it as a JSON messenging service.
 4. Depends on geth making the following IPC modules available `--ipc-apis=personal,miner,eth,web3,debug`.
 5. We have to use transactions instead of just header `extraData` because that field is limited to 32 bytes and signature hashes are 65. This is kind of annoying because it would be a lot simpler to just include the signature in the header.
 6. It's far faster to use an already-unlocked account for the authorities to sign block hashes. However, this compromises the public `eth` module from being used as a public RPC endpoint. This is a bummer. It means that only Minion nodes are safe to use as RPC endpoints.
+7. `personal` and `miner` IPC modules only need to be enabled for authority nodes.
