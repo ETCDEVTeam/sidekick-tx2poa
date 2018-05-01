@@ -1,20 +1,23 @@
+// global variable settings
 var minerThreads = 1;
-var minerDebounceSleep = 5; // shoot me now.
+var minerDebounceSleep = 5; // Seconds. Prevent "stuckness" when authority miners create blocks too closely. FIXME: use elective candidacy for miner/sealing authority ordering.
+
+// global cache values
 var lastValidBlockNumber = 0;
 var cacheAuthorityOrMinion = "";
+
+// convenience loggers
 function mustAmMinionOrAuthority() {
 	if (cacheAuthorityOrMinion !== "") {return cacheAuthorityOrMinion; }
 	cacheAuthorityOrMinion = (eth.accounts.length > 0 && authorities.indexOf(eth.accounts[0]) >= 0) ? "AUTHORITY" : "MINION";
 	return cacheAuthorityOrMinion;
 }
-
 function logWithPrefix(s) {
 	console.log("\n" + mustAmMinionOrAuthority() + "@[" + admin.nodeInfo.id.substring(0,6)+admin.nodeInfo.listenAddr +"]\n", s);
 }
-
 function logStatus(action, state, reason, detailsObj) {
 	var s = "\n    " + action + ": " + state;
-	if (reason !== null) {s += "(" + reason + ")"; }
+	if (reason !== null) {s += " (" + reason + ")"; }
 	s += "\n";
 	for (k in detailsObj) {
 		if (detailsObj.hasOwnProperty(k)) {
@@ -31,7 +34,8 @@ function logStatus(action, state, reason, detailsObj) {
 	logWithPrefix(s);
 }
 
-
+// findPoaTxData finds the relevant "incomplete proof of authority" transaction in a block and returns it's associated data. 
+// This is called as a part of the block verification function.
 function findPoaTxData(block) {
 	var out = {
 		ok: false,
@@ -61,6 +65,7 @@ function findPoaTxData(block) {
 			out.error = "invalid PoA Tx data";
 			return out;
 		}
+		// Extra sanity checks disabled for now because Javascript.
 		// if ((typeof data.sig === "String") && (typeof data.enode === "String")) {
 			out.ok = true;
 			out.data = data;
@@ -145,12 +150,15 @@ function validateAuthorityByTransaction(block) {
 		"recovered": rec,
 		"miner": block.miner
 	});
+	// TODO/NOTE: given a verified block, the associated trusted JSON data could be used to transfer arbitrary
+	// network or state data. For example, current authority nodes, dropped nodes, a next-elected authority-sealer candidate address,
+	// checkpoint data, etc...
 	return ok;
 }
 
-// ensureOrIgnoreBlockAuthority validates the current block's authority.
-// if validation fails, the block is purged and the function returns false.
-// if validation succeeds, the function returns true.
+// handleValidateAuthority delegates block validation logic.
+// It accepts two arguments to be used as callbacks in case of invalid or valid block states,
+// each of which receives the block number in question.
 function handleValidateAuthority(onInvalid, onValid) {
 	var bn = eth.blockNumber;
 	var b = eth.getBlock(bn);
@@ -163,17 +171,23 @@ function handleValidateAuthority(onInvalid, onValid) {
 	}
 }
 
-// FIXME Isaac thinks I need a lock or a debouncer
+// postAuthorityDemonstration is the function an authority node uses to post it's "incomplete proof of authority"
+// transaction to the network. Mining is paused while the transaction is created and broadcasted, ensuring
+// that the node always includes it's own transaction in it's (maybe winning) block.
 function postAuthorityDemonstration(resendableTxObj) {
 
 	// pause miner
 	miner.stop();
 
-	function beginMining() {
+	function upauseMining() {
 		admin.sleep(minerDebounceSleep);
+		// A hacky kind of round robin for next-authority miner candidacy.
+		// This may not be necessary, and AFAIInteded is just a workaround for
+		// preventing a "bouncing" between "competing" authority mining and block validation issue.
+		// This only works when there are only two authority nodes.
+		// Other, more sophisticated, systems of elegibility for authority mining are easily within reach
+		// using the data included in a poatx.
 		var i = authorities.indexOf(eth.accounts[0]);
-		// sneaky kind of round robin
-		// this may not be necessary
 		if (eth.blockNumber % (i+1) === i) {
 				miner.start(minerThreads);
 		}
@@ -189,9 +203,9 @@ function postAuthorityDemonstration(resendableTxObj) {
 			"signature": sig
 		});
 		resendableTxObj.nonce++;
-		// eth.resend(resendableTxObj); // fails because tx can not be found
+
 		eth.sendTransaction(resendableTxObj);
-		beginMining();
+		upauseMining();
 		return resendableTxObj;
 	}
 
@@ -249,10 +263,10 @@ function postAuthorityDemonstration(resendableTxObj) {
 		"signature": sig
 	});
 
-	// set tx hash as miner.ExtraData in case our miner wins
-	// the tx substring part aids precision of validation by enabling QueryN=1 eth.getTransaction query instead of QueryN <= block.transactions.length
+	// set tx hash as miner.ExtraData, relevant in case our miner wins
+	// the tx substring part aids precision of validation by enabling QueryN=1 eth.getTransaction query 
+	// instead of QueryN <= block.transactions.length
 	if (!miner.setExtra(txh.substring(0,8)+sig_part1)) {
-
 		logStatus("AUTHORITY", "ERROR", "failed to set miner extra data", {
 			"eth_blockNumber": eth.blockNumber,
 			"authority": authorityAccount,
@@ -266,13 +280,14 @@ function postAuthorityDemonstration(resendableTxObj) {
 	}
 
 	if (status === "success") {
-		beginMining();
+		upauseMining();
 	}
 
 	return txObj;
 }
 
-// ensure there is an account and that it is unlocked
+// ensureAuthorityAccount ensures there is an account and that it is unlocked.
+// It's a convenience and nice-to-have only.
 function ensureAuthorityAccount() {
 	var authorityAccount;
 
@@ -316,8 +331,6 @@ function ensureAuthorityAccount() {
 // The function also validates the authority of all incoming blocks.
 // FIXME: it might block the normal shutdown mechanism for a geth client
 function runAuthority(txo) {
-
-	// TODO handle if was an error posting poa tx
 	handleValidateAuthority(
 		function onFail(bn) {
 				debug.setHead(bn-1);
@@ -333,12 +346,16 @@ function runAuthority(txo) {
 	runAuthority(txo);
 }
 
+// defaultInvalidCallback sets the head to the last known valid block number in case 
+// an incoming block is determined to be invalid.
 var defaultInvalidCallback = function(invalidBlockNumber) {
 	debug.setHead(lastValidBlockNumber);
 }
+
+// defaultValidCallback is called after a newly-inserted block is determined to have been actually authored by an authority.
 var defaultValidCallback = function(validBlockNumber) {
 	if (lastValidBlockNumber < validBlockNumber) {
-			lastValidBlockNumber = validBlockNumber;
+		lastValidBlockNumber = validBlockNumber;
 	}
 }
 

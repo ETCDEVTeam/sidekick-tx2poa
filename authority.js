@@ -1,4 +1,4 @@
-loadScript("tx2poa.js");
+loadScript("tx2poa.js"); // assume --js-path has been used to set base js dir
 
 if (ensureAuthorityAccount()) {
   runAuthority();

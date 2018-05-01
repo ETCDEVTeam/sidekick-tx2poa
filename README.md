@@ -44,12 +44,14 @@ If a block fails this PoA/Tx validation, the block is simply purged.
 
 ### Run
 
+> A working configuration for a private network using this Tx2PoA can be found here [github.com/ETCDEVTeam/sidekick-poc](http://github.com/ETCDEVTeam/sidekick-poc).
+
 1. Edit `authorities.js` to include public keys for nodes that should have authority. This list should be identical for each node in the network.
 2. Ensure `sidenet/chain.json` configuration specifies `"consensus": "ethash-test"` unless you really like burning electricity.
 3. You'll probably want to set up your authority nodes as bootnodes in the config as well.
 4. Run:
 ```
-$ geth --chain=sidenet --ipc-api="personal,miner,eth,web3,debug" --js-path="./sidekick-tx2poa" js path/to/authority.js
+$ geth --chain=sidenet --ipc-api="personal,miner,eth,web3,debug" --js-path="./sidekick-tx2poa" --unlock 0 --password path/to/password.file js path/to/authority.js
 
 OR
 
@@ -58,7 +60,6 @@ $ geth --chain=sidenet --ipc-api="eth,web3,debug" --js-path="./sidekick-tx2poa" 
 
 ### Notes
 
-1. I'm not sure if this'll actually work.
 2. I don't know if it will be very scalable.
 3. It depends on using `tx.data[|input]` in a hacky way; instead of using it as compiled contract code it just uses it as a JSON messenging service.
 4. Depends on geth making the following IPC modules available `--ipc-apis=personal,miner,eth,web3,debug`.
